@@ -24,6 +24,7 @@ from datasets import dataset_factory
 from deployment import model_deploy
 from nets import nets_factory
 from preprocessing import preprocessing_factory
+from datetime import datetime
 
 slim = tf.contrib.slim
 
@@ -381,6 +382,7 @@ def _get_variables_to_train():
 
 def main(_):
   if not FLAGS.dataset_dir:
+      DATE_STR = datetime.now().strftime('%Y-%m-%d__%I-%M-%S%p')
     raise ValueError('You must supply the dataset directory with --dataset_dir')
 
   tf.logging.set_verbosity(tf.logging.INFO)
