@@ -14,9 +14,14 @@
 # ==============================================================================
 """Generic training script that trains a model using a given dataset."""
 
+# TODO: Export dataset to tf records resized to 224x224
+# TODO: Change loss to Euclidean
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import os
 
 import tensorflow as tf
 
@@ -31,8 +36,9 @@ slim = tf.contrib.slim
 tf.app.flags.DEFINE_string(
     'master', '', 'The address of the TensorFlow master to use.')
 
+default_train_dir = datetime.now().strftime(os.path.join(os.path.expanduser('~'), 'mnet2_tf', '%Y-%m-%d__%I-%M-%S%p'))
 tf.app.flags.DEFINE_string(
-    'train_dir', '/tmp/tfmodel/',
+    'train_dir', default_train_dir,
     'Directory where checkpoints and event logs are written to.')
 
 tf.app.flags.DEFINE_integer('num_clones', 1,
@@ -382,7 +388,6 @@ def _get_variables_to_train():
 
 def main(_):
   if not FLAGS.dataset_dir:
-      DATE_STR = datetime.now().strftime('%Y-%m-%d__%I-%M-%S%p')
     raise ValueError('You must supply the dataset directory with --dataset_dir')
 
   tf.logging.set_verbosity(tf.logging.INFO)
