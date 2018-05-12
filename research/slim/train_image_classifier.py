@@ -14,8 +14,12 @@
 # ==============================================================================
 """Generic training script that trains a model using a given dataset."""
 
-# TODO: Export dataset to tf records resized to 224x224
-# TODO: Change loss to Euclidean
+# DONE: Export dataset to tf records resized to 224x224
+# - Get features (img, speed, steer, ...), put into example / split train, test, ...
+# DONE: Change prepro not to flip
+# DONE: Change loss to Euclidean
+# TODO: Read tfrecords and get size
+# TODO: See if we need to break tfrecords into more manageably sized chunks
 
 from __future__ import absolute_import
 from __future__ import division
@@ -415,11 +419,20 @@ def main(_):
     ######################
     # Select the network #
     ######################
-    network_fn = nets_factory.get_network_fn(
+    if FLAGS.model_name == 'mobilenet_v2_deepdrive':
+      network_fn = nets_factory.get_network_fn(
         FLAGS.model_name,
-        num_classes=(dataset.num_classes - FLAGS.labels_offset),
         weight_decay=FLAGS.weight_decay,
-        is_training=True)
+        num_classes=None,
+        num_targets=6,
+        is_training=True,)
+
+    else:
+      network_fn = nets_factory.get_network_fn(
+          FLAGS.model_name,
+          num_classes=(dataset.num_classes - FLAGS.labels_offset),
+          weight_decay=FLAGS.weight_decay,
+          is_training=True)
 
     #####################################
     # Select the preprocessing function #
@@ -438,41 +451,63 @@ def main(_):
           num_readers=FLAGS.num_readers,
           common_queue_capacity=20 * FLAGS.batch_size,
           common_queue_min=10 * FLAGS.batch_size)
-      [image, label] = provider.get(['image', 'label'])
-      label -= FLAGS.labels_offset
 
-      train_image_size = FLAGS.train_image_size or network_fn.default_image_size
+      if FLAGS.model_name == 'mobilenet_v2_deepdrive':
+        [image, spin, direction, speed, speed_change, steering, throttle] = provider.get(
+          ['image', 'spin', 'direction', 'speed', 'speed_change', 'steering', 'throttle'])
 
-      image = image_preprocessing_fn(image, train_image_size, train_image_size)
+        train_image_size = FLAGS.train_image_size or network_fn.default_image_size
 
-      images, labels = tf.train.batch(
-          [image, label],
-          batch_size=FLAGS.batch_size,
-          num_threads=FLAGS.num_preprocessing_threads,
-          capacity=5 * FLAGS.batch_size)
-      labels = slim.one_hot_encoding(
-          labels, dataset.num_classes - FLAGS.labels_offset)
-      batch_queue = slim.prefetch_queue.prefetch_queue(
-          [images, labels], capacity=2 * deploy_config.num_clones)
+        image = image_preprocessing_fn(image, train_image_size, train_image_size)
+
+        images, targets = tf.train.batch(
+            [image, [spin, direction, speed, speed_change, steering, throttle]],
+            batch_size=FLAGS.batch_size,
+            num_threads=FLAGS.num_preprocessing_threads,
+            capacity=5 * FLAGS.batch_size)
+
+        batch_queue = slim.prefetch_queue.prefetch_queue(
+            [images, targets], capacity=2 * deploy_config.num_clones)
+      else:
+        [image, label] = provider.get(['image', 'label'])
+        label -= FLAGS.labels_offset
+
+        train_image_size = FLAGS.train_image_size or network_fn.default_image_size
+
+        image = image_preprocessing_fn(image, train_image_size, train_image_size)
+
+        images, labels = tf.train.batch(
+            [image, label],
+            batch_size=FLAGS.batch_size,
+            num_threads=FLAGS.num_preprocessing_threads,
+            capacity=5 * FLAGS.batch_size)
+        labels = slim.one_hot_encoding(
+            labels, dataset.num_classes - FLAGS.labels_offset)
+        batch_queue = slim.prefetch_queue.prefetch_queue(
+            [images, labels], capacity=2 * deploy_config.num_clones)
 
     ####################
     # Define the model #
     ####################
     def clone_fn(batch_queue):
       """Allows data parallelism by creating multiple clones of network_fn."""
-      images, labels = batch_queue.dequeue()
-      logits, end_points = network_fn(images)
-
       #############################
       # Specify the loss function #
       #############################
-      if 'AuxLogits' in end_points:
+      if FLAGS.model_name == 'mobilenet_v2_deepdrive':
+        images, targets = batch_queue.dequeue()
+        logits, end_points = network_fn(images)
+        tf.losses.add_loss(tf.nn.l2_loss((logits - targets) / targets.shape[1].value**.5))
+      else:
+        images, labels = batch_queue.dequeue()
+        logits, end_points = network_fn(images)
+        if 'AuxLogits' in end_points:
+          slim.losses.softmax_cross_entropy(
+              end_points['AuxLogits'], labels,
+              label_smoothing=FLAGS.label_smoothing, weights=0.4,
+              scope='aux_loss')
         slim.losses.softmax_cross_entropy(
-            end_points['AuxLogits'], labels,
-            label_smoothing=FLAGS.label_smoothing, weights=0.4,
-            scope='aux_loss')
-      slim.losses.softmax_cross_entropy(
-          logits, labels, label_smoothing=FLAGS.label_smoothing, weights=1.0)
+            logits, labels, label_smoothing=FLAGS.label_smoothing, weights=1.0)
       return end_points
 
     # Gather initial summaries.

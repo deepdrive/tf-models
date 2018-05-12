@@ -61,6 +61,7 @@ networks_map = {'alexnet_v2': alexnet.alexnet_v2,
                 'mobilenet_v1_050': mobilenet_v1.mobilenet_v1_050,
                 'mobilenet_v1_025': mobilenet_v1.mobilenet_v1_025,
                 'mobilenet_v2': mobilenet_v2.mobilenet,
+                'mobilenet_v2_deepdrive': mobilenet_v2.mobilenet_deepdrive,
                 'nasnet_cifar': nasnet.build_nasnet_cifar,
                 'nasnet_mobile': nasnet.build_nasnet_mobile,
                 'nasnet_large': nasnet.build_nasnet_large,
@@ -93,6 +94,7 @@ arg_scopes_map = {'alexnet_v2': alexnet.alexnet_v2_arg_scope,
                   'mobilenet_v1_050': mobilenet_v1.mobilenet_v1_arg_scope,
                   'mobilenet_v1_025': mobilenet_v1.mobilenet_v1_arg_scope,
                   'mobilenet_v2': mobilenet_v2.training_scope,
+                  'mobilenet_v2_deepdrive': mobilenet_v2.training_scope,
                   'nasnet_cifar': nasnet.nasnet_cifar_arg_scope,
                   'nasnet_mobile': nasnet.nasnet_mobile_arg_scope,
                   'nasnet_large': nasnet.nasnet_large_arg_scope,
@@ -100,7 +102,7 @@ arg_scopes_map = {'alexnet_v2': alexnet.alexnet_v2_arg_scope,
                  }
 
 
-def get_network_fn(name, num_classes, weight_decay=0.0, is_training=False):
+def get_network_fn(name, num_classes, weight_decay=0.0, is_training=False, num_targets=None):
   """Returns a network_fn such as `logits, end_points = network_fn(images)`.
 
   Args:
@@ -138,7 +140,8 @@ def get_network_fn(name, num_classes, weight_decay=0.0, is_training=False):
   def network_fn(images, **kwargs):
     arg_scope = arg_scopes_map[name](weight_decay=weight_decay)
     with slim.arg_scope(arg_scope):
-      return func(images, num_classes, is_training=is_training, **kwargs)
+      out_dim = num_targets if num_targets is not None else num_classes
+      return func(images, out_dim, is_training=is_training, **kwargs)
   if hasattr(func, 'default_image_size'):
     network_fn.default_image_size = func.default_image_size
 

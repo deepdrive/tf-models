@@ -25,29 +25,30 @@
 set -ev
 
 # Where the pre-trained InceptionV3 checkpoint is saved to.
-PRETRAINED_CHECKPOINT_DIR=/tmp/checkpoints/mobilenet_v2
+PRETRAINED_CHECKPOINT_DIR=/home/a/mnet-test/checkpoints
 
 # Where the training (fine-tuned) checkpoint and logs will be saved to.
-TRAIN_DIR=/tmp/flowers-models/mobilenet_v2
+TRAIN_DIR=/home/a/mnet-test/models
 
 # Where the dataset is saved to.
-DATASET_DIR=/tmp/flowers
+DATASET_DIR=/home/a/mnet-test/flowers
 
 # Download the pre-trained checkpoint.
 if [ ! -d "$PRETRAINED_CHECKPOINT_DIR" ]; then
-  mkdir ${PRETRAINED_CHECKPOINT_DIR}
+  mkdir -p ${PRETRAINED_CHECKPOINT_DIR}
 fi
 if [ ! -f ${PRETRAINED_CHECKPOINT_DIR}/mobilenet_v2_1.0_224.ckpt.meta ]; then
+  cd ${PRETRAINED_CHECKPOINT_DIR}
   wget https://storage.googleapis.com/mobilenet_v2/checkpoints/mobilenet_v2_1.0_224.tgz
   tar -xvf mobilenet_v2_1.0_224.tgz
-  mv mobilenet_v2_1.0_224* ${PRETRAINED_CHECKPOINT_DIR}/
   rm ${PRETRAINED_CHECKPOINT_DIR}/mobilenet_v2_1.0_224.tgz
+  cd -
 fi
 
-## Download the dataset
-#python download_and_convert_data.py \
-#  --dataset_name=flowers \
-#  --dataset_dir=${DATASET_DIR}
+# Download the dataset
+python download_and_convert_data.py \
+  --dataset_name=flowers \
+  --dataset_dir=${DATASET_DIR}
 
 # Fine-tune only the new layers for 1000 steps.
 python train_image_classifier.py \
