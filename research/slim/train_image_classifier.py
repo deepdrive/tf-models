@@ -18,8 +18,8 @@
 # - Get features (img, speed, steer, ...), put into example / split train, test, ...
 # DONE: Change prepro not to flip
 # DONE: Change loss to Euclidean
-# TODO: Read tfrecords and get size
-# TODO: See if we need to break tfrecords into more manageably sized chunks
+# DONE: Read tfrecords and get size
+# DONE: See if we need to break tfrecords into more manageably sized chunks
 
 from __future__ import absolute_import
 from __future__ import division
@@ -497,7 +497,20 @@ def main(_):
       if FLAGS.model_name == 'mobilenet_v2_deepdrive':
         images, targets = batch_queue.dequeue()
         logits, end_points = network_fn(images)
-        tf.losses.add_loss(tf.nn.l2_loss((logits - targets) / targets.shape[1].value**.5))
+        # targets = tf.Print(targets, [targets[0][0], logits[0][0]], 'epxpected and actual spin ')
+        # targets = tf.Print(targets, [targets[0][1], logits[0][1]], 'epxpected and actual direction ')
+        # targets = tf.Print(targets, [targets[0][2], logits[0][2]], 'epxpected and actual speed ')
+        # targets = tf.Print(targets, [targets[0][3], logits[0][3]], 'epxpected and actual speed_change ')
+        # targets = tf.Print(targets, [targets[0][4], logits[0][4]], 'epxpected and actual steering ')
+        # targets = tf.Print(targets, [targets[0][5], logits[0][5]], 'epxpected and actual throttle ')
+
+        target_delta = logits - targets
+        # target_delta = tf.Print(target_delta, [target_delta], 'target_delta ')
+
+        sq_root_normalized_target_delta = target_delta / targets.shape[1].value**.5
+        # sq_root_normalized_target_delta = tf.Print(sq_root_normalized_target_delta, [sq_root_normalized_target_delta], 'sq_root_normalized_target_delta ')
+
+        tf.losses.add_loss(tf.nn.l2_loss(sq_root_normalized_target_delta))
       else:
         images, labels = batch_queue.dequeue()
         logits, end_points = network_fn(images)

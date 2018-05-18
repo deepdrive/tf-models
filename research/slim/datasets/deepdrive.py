@@ -29,9 +29,9 @@ from datasets import dataset_utils
 
 slim = tf.contrib.slim
 
-_FILE_PATTERN = 'deepdrive_%s.tfrecord'
+_FILE_PATTERN = 'deepdrive_%s_*.tfrecord'
 
-SPLITS_TO_SIZES = {'train': 3320, 'eval': 350}
+SPLITS_TO_SIZES = {'train': 1000 * 164, 'eval': 1000}
 
 _ITEMS_TO_DESCRIPTIONS = {
     'image': 'A color image of varying size.',
