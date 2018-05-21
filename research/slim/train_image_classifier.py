@@ -25,11 +25,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import glob
 import os
 
 import tensorflow as tf
 
 from datasets import dataset_factory
+from datasets.deepdrive import DEEPDRIVE_TRAIN_PARENT_DIR
 from deployment import model_deploy
 from nets import nets_factory
 from preprocessing import preprocessing_factory
@@ -37,10 +39,15 @@ from datetime import datetime
 
 slim = tf.contrib.slim
 
+
 tf.app.flags.DEFINE_string(
     'master', '', 'The address of the TensorFlow master to use.')
 
-default_train_dir = datetime.now().strftime(os.path.join(os.path.expanduser('~'), 'mnet2_tf', '%Y-%m-%d__%I-%M-%S%p'))
+
+tf.app.flags.DEFINE_boolean('resume_deepdrive', False,
+                            'Resume the previous training session in deepdrive.')
+
+default_train_dir = datetime.now().strftime(os.path.join(DEEPDRIVE_TRAIN_PARENT_DIR, '%Y-%m-%d__%I-%M-%S%p'))
 tf.app.flags.DEFINE_string(
     'train_dir', default_train_dir,
     'Directory where checkpoints and event logs are written to.')
@@ -391,6 +398,14 @@ def _get_variables_to_train():
 
 
 def main(_):
+  if FLAGS.resume_deepdrive:
+    # Mysteriously can not do this due to RMSProp restore error
+    # FLAGS.train_dir = max(glob.glob(DEEPDRIVE_TRAIN_PARENT_DIR + '/*'), key=os.path.getmtime)
+
+    FLAGS.checkpoint_path = max(glob.glob(DEEPDRIVE_TRAIN_PARENT_DIR + '/*'), key=os.path.getmtime)
+
+  print('train dir is', FLAGS.train_dir)
+
   if not FLAGS.dataset_dir:
     raise ValueError('You must supply the dataset directory with --dataset_dir')
 
@@ -501,11 +516,17 @@ def main(_):
         # targets = tf.Print(targets, [targets[0][1], logits[0][1]], 'epxpected and actual direction ')
         # targets = tf.Print(targets, [targets[0][2], logits[0][2]], 'epxpected and actual speed ')
         # targets = tf.Print(targets, [targets[0][3], logits[0][3]], 'epxpected and actual speed_change ')
-        # targets = tf.Print(targets, [targets[0][4], logits[0][4]], 'epxpected and actual steering ')
+        # targets = tf.Print(targets, [targets[0][4], logits[0][4]], 'expected and actual steering ')
         # targets = tf.Print(targets, [targets[0][5], logits[0][5]], 'epxpected and actual throttle ')
 
         target_delta = logits - targets
         # target_delta = tf.Print(target_delta, [target_delta], 'target_delta ')
+
+        steering_delta = target_delta[:, 4]
+        mean_steering_delta = tf.reduce_mean(tf.abs(steering_delta))
+        target_delta = tf.Print(target_delta, [mean_steering_delta], 'steering error ')
+
+        tf.summary.scalar('steering_error/train', mean_steering_delta)
 
         sq_root_normalized_target_delta = target_delta / targets.shape[1].value**.5
         # sq_root_normalized_target_delta = tf.Print(sq_root_normalized_target_delta, [sq_root_normalized_target_delta], 'sq_root_normalized_target_delta ')

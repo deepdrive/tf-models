@@ -29,7 +29,9 @@ from datasets import dataset_utils
 
 slim = tf.contrib.slim
 
-_FILE_PATTERN = 'deepdrive_%s_*.tfrecord'
+DEEPDRIVE_TRAIN_PARENT_DIR = os.path.join(os.path.expanduser('~'), 'mnet2_tf', 'fast')
+
+_FILE_PATTERN = 'deepdrive_%s*.tfrecord'
 
 SPLITS_TO_SIZES = {'train': 1000 * 164, 'eval': 1000}
 
@@ -49,7 +51,7 @@ def get_split(split_name, dataset_dir, file_pattern=None, reader=None):
 
   Args:
     split_name: A train/validation split name.
-    dataset_dir: The base directory of the dataset sources.
+    dataset_dir: The b`ase directory of the dataset sources.
     file_pattern: The file pattern to use when matching the dataset sources.
       It is assumed that the pattern contains a '%s' string so that the split
       name can be inserted.

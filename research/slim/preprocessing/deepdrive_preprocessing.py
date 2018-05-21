@@ -278,8 +278,12 @@ def preprocess_for_eval(image, height, width,
       image = tf.image.convert_image_dtype(image, dtype=tf.float32)
     # Crop the central region of the image with an area containing 87.5% of
     # the original image.
-    if central_fraction:
-      image = tf.image.central_crop(image, central_fraction=central_fraction)
+    # if central_fraction:
+    #   image = tf.image.central_crop(image, central_fraction=central_fraction)
+
+    # image = tf.Print(image, [image], 'image in eval prepro is ', summarize=100)
+    image = tf.reshape(image, [height, width, 3])
+
 
     if height and width:
       # Resize the image to the specified height and width.

@@ -18,10 +18,14 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import glob
 import math
+import os
+
 import tensorflow as tf
 
 from datasets import dataset_factory
+from datasets.deepdrive import DEEPDRIVE_TRAIN_PARENT_DIR
 from nets import nets_factory
 from preprocessing import preprocessing_factory
 
@@ -38,12 +42,12 @@ tf.app.flags.DEFINE_string(
     'master', '', 'The address of the TensorFlow master to use.')
 
 tf.app.flags.DEFINE_string(
-    'checkpoint_path', '/tmp/tfmodel/',
+    'checkpoint_path', None,
     'The directory where the model was written to or an absolute path to a '
     'checkpoint file.')
 
 tf.app.flags.DEFINE_string(
-    'eval_dir', '/tmp/tfmodel/', 'Directory where the results are saved to.')
+    'eval_dir', None, 'Directory where the results are saved to.')
 
 tf.app.flags.DEFINE_integer(
     'num_preprocessing_threads', 4,
@@ -83,6 +87,9 @@ FLAGS = tf.app.flags.FLAGS
 
 
 def main(_):
+  if FLAGS.eval_dir is None:
+    FLAGS.eval_dir = max(glob.glob(DEEPDRIVE_TRAIN_PARENT_DIR + '/*'), key=os.path.getmtime)
+
   if not FLAGS.dataset_dir:
     raise ValueError('You must supply the dataset directory with --dataset_dir')
 
@@ -99,21 +106,21 @@ def main(_):
     ####################
     # Select the model #
     ####################
-    network_fn = nets_factory.get_network_fn(
+    ######################
+    # Select the network #
+    ######################
+    if FLAGS.model_name == 'mobilenet_v2_deepdrive':
+      network_fn = nets_factory.get_network_fn(
         FLAGS.model_name,
-        num_classes=(dataset.num_classes - FLAGS.labels_offset),
-        is_training=False)
+        num_classes=None,
+        num_targets=6,
+        is_training=False,)
 
-    ##############################################################
-    # Create a dataset provider that loads data from the dataset #
-    ##############################################################
-    provider = slim.dataset_data_provider.DatasetDataProvider(
-        dataset,
-        shuffle=False,
-        common_queue_capacity=2 * FLAGS.batch_size,
-        common_queue_min=FLAGS.batch_size)
-    [image, label] = provider.get(['image', 'label'])
-    label -= FLAGS.labels_offset
+    else:
+      network_fn = nets_factory.get_network_fn(
+          FLAGS.model_name,
+          num_classes=(dataset.num_classes - FLAGS.labels_offset),
+          is_training=False)
 
     #####################################
     # Select the preprocessing function #
@@ -125,13 +132,36 @@ def main(_):
 
     eval_image_size = FLAGS.eval_image_size or network_fn.default_image_size
 
-    image = image_preprocessing_fn(image, eval_image_size, eval_image_size)
+    ##############################################################
+    # Create a dataset provider that loads data from the dataset #
+    ##############################################################
+    provider = slim.dataset_data_provider.DatasetDataProvider(
+        dataset,
+        shuffle=False,
+        common_queue_capacity=2 * FLAGS.batch_size,
+        common_queue_min=FLAGS.batch_size)
+    if FLAGS.model_name == 'mobilenet_v2_deepdrive':
+      [image, spin, direction, speed, speed_change, steering, throttle] = provider.get(
+        ['image', 'spin', 'direction', 'speed', 'speed_change', 'steering', 'throttle'])
 
-    images, labels = tf.train.batch(
-        [image, label],
+      image = image_preprocessing_fn(image, eval_image_size, eval_image_size)
+
+      images, targets = tf.train.batch(
+        [image, [spin, direction, speed, speed_change, steering, throttle]],
         batch_size=FLAGS.batch_size,
         num_threads=FLAGS.num_preprocessing_threads,
         capacity=5 * FLAGS.batch_size)
+    else:
+      [image, label] = provider.get(['image', 'label'])
+      label -= FLAGS.labels_offset
+
+      image = image_preprocessing_fn(image, eval_image_size, eval_image_size)
+
+      images, labels = tf.train.batch(
+          [image, label],
+          batch_size=FLAGS.batch_size,
+          num_threads=FLAGS.num_preprocessing_threads,
+          capacity=5 * FLAGS.batch_size)
 
     ####################
     # Define the model #
@@ -147,15 +177,50 @@ def main(_):
     else:
       variables_to_restore = slim.get_variables_to_restore()
 
-    predictions = tf.argmax(logits, 1)
-    labels = tf.squeeze(labels)
+    if FLAGS.model_name == 'mobilenet_v2_deepdrive':
+      # targets = tf.Print(targets, [targets[0][0], logits[0][0]], 'epxpected and actual spin ')
+      # targets = tf.Print(targets, [targets[0][1], logits[0][1]], 'epxpected and actual direction ')
+      # targets = tf.Print(targets, [targets[0][2], logits[0][2]], 'epxpected and actual speed ')
+      # targets = tf.Print(targets, [targets[0][3], logits[0][3]], 'epxpected and actual speed_change ')
+      # targets = tf.Print(targets, [targets[:, 4]], 'expected steering ', summarize=600)
+      # targets = tf.Print(targets, [logits[:, 4]],  'actual steering   ', summarize=600)
+      # targets = tf.Print(targets, [targets[0][5], logits[0][5]], 'epxpected and actual throttle ')
 
-    # Define the metrics:
-    names_to_values, names_to_updates = slim.metrics.aggregate_metric_map({
-        'Accuracy': slim.metrics.streaming_accuracy(predictions, labels),
-        'Recall_5': slim.metrics.streaming_recall_at_k(
-            logits, labels, 5),
-    })
+      target_delta = logits - targets
+      steering_delta = target_delta[:, 4]
+      target_delta = tf.Print(target_delta, [steering_delta], 'steering_delta ', summarize=1000)
+      mean_steering_delta = tf.reduce_mean(tf.abs(steering_delta))
+
+      tf.summary.scalar('steering_error/eval', mean_steering_delta)
+
+      targets = tf.Print(targets, [mean_steering_delta], 'eval steering error ')
+
+
+      sq_root_normalized_target_delta = target_delta / targets.shape[1].value ** .5
+      # sq_root_normalized_target_delta = tf.Print(sq_root_normalized_target_delta, [sq_root_normalized_target_delta], 'sq_root_normalized_target_delta ')
+
+      dd_loss = tf.nn.l2_loss(sq_root_normalized_target_delta)
+
+      targets = tf.Print(targets, [dd_loss], 'eval loss ')
+      # targets = tf.Print(targets, [targets, logits], 'targets and logits ', summarize=100)
+      # targets = tf.Print(targets, [targets, logits], 'target_delta ', summarize=100)
+
+
+      # Define the metrics:
+      names_to_values, names_to_updates = slim.metrics.aggregate_metric_map({
+          'Accuracy': slim.metrics.streaming_accuracy(logits, targets)
+      })
+
+    else:
+      predictions = tf.argmax(logits, 1)
+      labels = tf.squeeze(labels)
+
+      # Define the metrics:
+      names_to_values, names_to_updates = slim.metrics.aggregate_metric_map({
+          'Accuracy': slim.metrics.streaming_accuracy(predictions, labels),
+          'Recall_5': slim.metrics.streaming_recall_at_k(
+              logits, labels, 5),
+      })
 
     # Print the summaries to screen.
     for name, value in names_to_values.items():
@@ -170,6 +235,10 @@ def main(_):
     else:
       # This ensures that we make a single pass over all of the data.
       num_batches = math.ceil(dataset.num_samples / float(FLAGS.batch_size))
+
+    if FLAGS.model_name == 'mobilenet_v2_deepdrive':
+      if not FLAGS.checkpoint_path:
+        FLAGS.checkpoint_path = max(glob.glob(DEEPDRIVE_TRAIN_PARENT_DIR + '/*'), key=os.path.getmtime)
 
     if tf.gfile.IsDirectory(FLAGS.checkpoint_path):
       checkpoint_path = tf.train.latest_checkpoint(FLAGS.checkpoint_path)
