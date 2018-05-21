@@ -15,13 +15,13 @@
 # ==============================================================================
 #
 # This script performs the following operations:
-# 1. Downloads the Flowers dataset
-# 2. Fine-tunes an InceptionV3 model on the Flowers training set.
-# 3. Evaluates the model on the Flowers validation set.
+# 2. Fine-tunes Mobilenet v2 on the Deepdrive train set.
+# 3. Evaluates the model on the Deepdrive eval set.
 #
 # Usage:
-# cd slim
-# ./slim/scripts/finetune_mobilenet_v2_on_flowers.sh
+# scripts/finetune_mobilenet_v2_on_deepdrive.sh
+#
+# Should see steering error of about 0.1135 / Original Deepdrive 2.0 baseline steering error eval was ~0.2, train steering error: ~0.08
 set -ev
 
 # Where the pre-trained InceptionV3 checkpoint is saved to.
@@ -33,7 +33,7 @@ TRAIN_DIR=/home/a/mnet-test/models
 # Where the dataset is saved to.
 DATASET_DIR=/media/a/data-ext4/deepdrive-data
 
-### Fine-tune only the new layers for 1000 steps.
+### Fine-tune only the new layers
 python train_image_classifier.py \
   --dataset_name=deepdrive \
   --dataset_split_name=train \
@@ -43,68 +43,15 @@ python train_image_classifier.py \
   --checkpoint_path=/home/a/mnet-test/checkpoints/mobilenet_v2_1.0_224.ckpt \
   --checkpoint_exclude_scopes=MobilenetV2/Logits,MobilenetV2/Predictions,MobilenetV2/predics \
   --trainable_scopes=MobilenetV2/Logits,MobilenetV2/Predictions,MobilenetV2/predics \
-  --max_number_of_steps=22100 \
+  --max_number_of_steps=2000 \
   --batch_size=32 \
-  --learning_rate=0.00001 \
+  --learning_rate=0.0001 \
   --learning_rate_decay_type=fixed \
-  --save_interval_secs=60 \
+  --save_interval_secs=10 \
   --save_summaries_secs=60 \
   --log_every_n_steps=20 \
   --optimizer=rmsprop \
   --weight_decay=0.00004
-
-#
-#python eval_image_classifier.py \
-#  --dataset_name=deepdrive \
-#  --dataset_split_name=eval \
-#  --dataset_dir=${DATASET_DIR} \
-#  --model_name=mobilenet_v2_deepdrive \
-#  --eval_image_size=224
-##  --checkpoint_path="/home/a/mnet2_tf/2018-05-18__04-46-32PM"\
-#
-## Fine-tune all the new layers for 10000 steps.
-#python train_image_classifier.py \
-#  --dataset_name=deepdrive \
-#  --resume_deepdrive \
-#  --dataset_split_name=train \
-#  --dataset_dir=${DATASET_DIR} \
-#  --model_name=mobilenet_v2_deepdrive \
-#  --train_image_size=224 \
-#  --max_number_of_steps=20000 \
-#  --batch_size=16 \
-#  --learning_rate=0.0000001 \
-#  --learning_rate_decay_type=fixed \
-#  --save_interval_secs=180 \
-#  --save_summaries_secs=60 \
-#  --log_every_n_steps=20 \
-#  --optimizer=rmsprop \
-#  --weight_decay=0.00004 \
-#
-#python eval_image_classifier.py \
-#  --dataset_name=deepdrive \
-#  --dataset_split_name=eval \
-#  --dataset_dir=${DATASET_DIR} \
-#  --model_name=mobilenet_v2_deepdrive \
-#  --eval_image_size=224
-
-#
-## Fine-tune all the new layers
-#python train_image_classifier.py \
-#  --dataset_name=deepdrive \
-#  --resume_deepdrive \
-#  --dataset_split_name=train \
-#  --dataset_dir=${DATASET_DIR} \
-#  --model_name=mobilenet_v2_deepdrive \
-#  --train_image_size=224 \
-#  --max_number_of_steps=41907 \
-#  --batch_size=16 \
-#  --learning_rate=0.00000005 \
-#  --learning_rate_decay_type=fixed \
-#  --save_interval_secs=180 \
-#  --save_summaries_secs=60 \
-#  --log_every_n_steps=20 \
-#  --optimizer=rmsprop \
-#  --weight_decay=0.00004
 
 python eval_image_classifier.py \
   --dataset_name=deepdrive \
@@ -113,6 +60,7 @@ python eval_image_classifier.py \
   --model_name=mobilenet_v2_deepdrive \
   --eval_image_size=224
 
+# Fine-tune all layers
 python train_image_classifier.py \
   --dataset_name=deepdrive \
   --resume_deepdrive \
@@ -120,12 +68,21 @@ python train_image_classifier.py \
   --dataset_dir=${DATASET_DIR} \
   --model_name=mobilenet_v2_deepdrive \
   --train_image_size=224 \
-  --max_number_of_steps=2000000 \
+  --max_number_of_steps=49147 \
   --batch_size=16 \
-  --learning_rate=0.000000005 \
+  --learning_rate=0.00004 \
   --learning_rate_decay_type=fixed \
   --save_interval_secs=180 \
   --save_summaries_secs=60 \
   --log_every_n_steps=20 \
   --optimizer=rmsprop \
   --weight_decay=0.00004
+
+
+python eval_image_classifier.py \
+  --dataset_name=deepdrive \
+  --dataset_split_name=eval \
+  --dataset_dir=${DATASET_DIR} \
+  --model_name=mobilenet_v2_deepdrive \
+  --eval_image_size=224
+
